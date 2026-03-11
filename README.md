@@ -43,6 +43,9 @@ Gemini 水印可近似为白色 Logo 的 Alpha 叠加，满足 `watermarked = α
 - 缩放（10%-200%）和平移调整
 - **批量应用** — 一键将当前变换参数应用到整行 / 整列 / 全部块
 
+<img width="1920" height="993" alt="image" src="https://github.com/user-attachments/assets/9e793440-8d0a-4075-9f2e-b4140c9e9f38" />
+
+
 ### 画布缩放
 - 缩放滑块（5%-100%）
 - 自适应 / 1:1 快捷按钮
