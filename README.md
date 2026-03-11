@@ -2,6 +2,8 @@
 
 一个纯前端的 Web 工具集，用于 **Gemini AI 生成图片的水印去除**、**图片网格切分编辑** 和 **九宫格切图**。
 
+主要用途：为 [Confirmo](https://confirmo.love/) 自定义形象生成所需的图片素材进行处理。感谢 [yetone](https://github.com/yetone/confirmo-releases) 提供如此优秀的插件！
+
 ## 页面
 
 | 页面 | 文件 | 说明 |
