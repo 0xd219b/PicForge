@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片自动调整工具</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* 顶部工具栏 */
+  .toolbar {
+    display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+    background: #16213e; border-bottom: 1px solid #0f3460; flex-wrap: wrap;
+  }
+  .toolbar label { font-size: 13px; color: #a0a0c0; }
+  .toolbar input[type="number"] {
+    width: 70px; padding: 4px 8px; background: #0f3460; border: 1px solid #533483;
+    color: #e0e0e0; border-radius: 4px; font-size: 13px;
+  }
+  .toolbar .sep { color: #533483; font-weight: bold; }
+  .toolbar input[type="range"] { vertical-align: middle; }
+  .toolbar button {
+    padding: 6px 16px; border: none; border-radius: 4px; font-size: 13px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .btn-primary { background: #533483; color: white; }
+  .btn-primary:hover { background: #6a42a0; }
+  .btn-success { background: #1a936f; color: white; }
+  .btn-success:hover { background: #22b384; }
+  .btn-warning { background: #c84b31; color: white; }
+  .btn-warning:hover { background: #e05a3e; }
+  .btn-info { background: #0f3460; color: #a0d2db; border: 1px solid #533483; }
+  .btn-info:hover { background: #1a4a80; }
+  .btn-info.active { background: #533483; color: white; }
+
+  /* 主内容区 */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* 左侧网格区域 */
+  .grid-panel {
+    flex: 1; overflow: auto; padding: 20px; display: flex;
+    flex-direction: column; align-items: center; position: relative;
+  }
+  .grid-zoom-bar {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center;
+    gap: 8px; padding: 6px 12px; background: rgba(22,33,62,0.92);
+    border: 1px solid #0f3460; border-radius: 4px; margin-bottom: 12px;
+    backdrop-filter: blur(4px); flex-shrink: 0;
+  }
+  .grid-zoom-bar label { font-size: 12px; color: #a0a0c0; }
+  .grid-zoom-bar button {
+    padding: 3px 10px; border: 1px solid #533483; background: #0f3460;
+    color: #a0d2db; border-radius: 3px; cursor: pointer; font-size: 13px;
+  }
+  .grid-zoom-bar button:hover { background: #1a4a80; }
+  .grid-zoom-bar .zoom-val { font-size: 12px; color: #e0e0e0; min-width: 40px; text-align: center; }
+  .grid-container {
+    display: inline-grid; gap: 1px; background: #533483;
+    border: 2px solid #533483; border-radius: 4px;
+    transform-origin: top center; transition: transform 0.15s ease;
+  }
+  .grid-cell {
+    cursor: pointer; position: relative; image-rendering: pixelated;
+    transition: outline 0.15s;
+  }
+  .grid-cell:hover { outline: 2px solid #a0d2db; outline-offset: -2px; z-index: 1; }
+  .grid-cell.selected { outline: 2px solid #e94560; outline-offset: -2px; z-index: 2; }
+  .grid-cell canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+  /* 右侧预览/编辑区 */
+  .side-panel {
+    width: 380px; background: #16213e; border-left: 1px solid #0f3460;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .side-header {
+    padding: 12px 16px; background: #0f3460; font-size: 14px; font-weight: 600;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .side-body { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+
+  .preview-canvas-wrap {
+    background: repeating-conic-gradient(#2a2a4a 0% 25%, #1a1a2e 0% 50%) 50% / 16px 16px;
+    border: 1px solid #533483; border-radius: 4px; display: flex;
+    align-items: center; justify-content: center; min-height: 200px;
+  }
+  .preview-canvas-wrap canvas {
+    max-width: 100%; max-height: 340px; image-rendering: pixelated;
+  }
+
+  /* 编辑工具 */
+  .edit-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .edit-tools label { font-size: 12px; color: #a0a0c0; }
+  .edit-tools input[type="range"] { width: 80px; }
+  .edit-tools .color-pick { width: 28px; height: 28px; border: 1px solid #533483; border-radius: 4px; cursor: pointer; }
+
+  /* 变换控制 */
+  .transform-section {
+    border: 1px solid #0f3460; border-radius: 4px; padding: 10px;
+    background: #0d1b3e; display: flex; flex-direction: column; gap: 8px;
+  }
+  .transform-section .section-title {
+    font-size: 13px; font-weight: 600; color: #a0d2db; margin-bottom: 2px;
+  }
+  .transform-row {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .transform-row label { font-size: 12px; color: #a0a0c0; min-width: 44px; }
+  .transform-row input[type="range"] { flex: 1; }
+  .transform-row .val { font-size: 12px; color: #e0e0e0; min-width: 40px; text-align: right; }
+  .transform-row input[type="number"] {
+    width: 56px; padding: 2px 4px; background: #0f3460; border: 1px solid #533483;
+    color: #e0e0e0; border-radius: 3px; font-size: 12px;
+  }
+
+  /* 上传区域 */
+  .upload-area {
+    border: 2px dashed #533483; border-radius: 8px; padding: 60px 20px;
+    text-align: center; cursor: pointer; transition: border-color 0.2s;
+  }
+  .upload-area:hover { border-color: #a0d2db; }
+  .upload-area p { color: #a0a0c0; margin-top: 8px; font-size: 14px; }
+  .upload-area .icon { font-size: 48px; color: #533483; }
+
+  .info-text { font-size: 12px; color: #888; }
+  .coord-text { font-size: 12px; color: #a0d2db; }
+
+  /* 隐藏的 file input */
+  #fileInput { display: none; }
+
+  /* 提示 */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #533483; color: white; padding: 10px 24px; border-radius: 6px;
+    font-size: 14px; z-index: 999; opacity: 0; transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 工具栏 -->
+  <div class="toolbar">
+    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">上传图片</button>
+    <input type="file" id="fileInput" accept="image/*">
+    <span class="sep">|</span>
+    <label>宽:</label><input type="number" id="targetW" value="1024" min="128" step="128">
+    <span class="sep">&times;</span>
+    <label>高:</label><input type="number" id="targetH" value="896" min="128" step="128">
+    <label>块大小:</label><input type="number" id="blockSize" value="128" min="32" step="32">
+    <span class="sep">|</span>
+    <button class="btn-info" id="btnWatermark" onclick="toggleWatermarkRemoval()">去水印: 开</button>
+    <label>强度:</label>
+    <input type="range" id="wmGain" min="0" max="30" value="0" step="1" style="width:80px;"
+      title="0=自动, 手动调大可增强去除效果">
+    <span class="info-text" id="wmGainVal" style="min-width:32px;">自动</span>
+    <button class="btn-info" onclick="reapplyWatermark()">重新去水印</button>
+    <span class="sep">|</span>
+    <button class="btn-success" onclick="applyResize()">应用切分</button>
+    <button class="btn-warning" onclick="exportImage()">导出图片</button>
+    <span class="info-text" id="infoText">请上传图片</span>
+  </div>
+
+  <!-- 主内容 -->
+  <div class="main">
+    <!-- 网格区域 -->
+    <div class="grid-panel" id="gridPanel">
+      <div class="grid-zoom-bar" id="zoomBar" style="display:none;">
+        <button onclick="zoomGrid(-10)">-</button>
+        <input type="range" id="gridZoom" min="5" max="100" value="100" style="width:120px;"
+          oninput="setGridZoom(parseInt(this.value))">
+        <button onclick="zoomGrid(10)">+</button>
+        <span class="zoom-val" id="gridZoomVal">100%</span>
+        <button onclick="zoomToFit()">适应</button>
+        <button onclick="setGridZoom(100)">1:1</button>
+      </div>
+      <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">&#x1F5BC;</div>
+        <p>点击或拖拽上传图片</p>
+        <p style="font-size:12px; margin-top:4px;">支持 PNG / JPG / WebP</p>
+      </div>
+      <div class="grid-container" id="gridContainer" style="display:none;"></div>
+    </div>
+
+    <!-- 右侧面板 -->
+    <div class="side-panel">
+      <div class="side-header">
+        <span id="sideTitle">预览 & 编辑</span>
+        <span class="coord-text" id="coordText"></span>
+      </div>
+      <div class="side-body">
+        <div class="preview-canvas-wrap" id="previewWrap">
+          <canvas id="previewCanvas" width="128" height="128"></canvas>
+        </div>
+
+        <div class="edit-tools">
+          <button class="btn-info" id="btnEraser" onclick="setTool('eraser')">橡皮擦</button>
+          <button class="btn-info" id="btnBrush" onclick="setTool('brush')">画笔</button>
+          <button class="btn-info" id="btnMove" onclick="setTool('move')">移动</button>
+          <label>大小:</label>
+          <input type="range" id="brushSize" min="1" max="50" value="10">
+          <span id="brushSizeVal" style="font-size:12px; min-width:24px;">10</span>
+          <label>颜色:</label>
+          <input type="color" class="color-pick" id="brushColor" value="#ffffff">
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-info" onclick="undoEdit()">撤销</button>
+          <button class="btn-info" onclick="resetBlock()">重置块</button>
+          <button class="btn-info" onclick="clearBlock()">清空块</button>
+        </div>
+
+        <!-- 块内容变换 -->
+        <div class="transform-section">
+          <div class="section-title">块内容变换（缩放 & 平移）</div>
+          <div class="transform-row">
+            <label>缩放:</label>
+            <input type="range" id="transformScale" min="10" max="200" value="100" step="1">
+            <span class="val" id="transformScaleVal">100%</span>
+          </div>
+          <div class="transform-row">
+            <label>X 偏移:</label>
+            <input type="number" id="transformX" value="0" step="1">
+            <label>Y 偏移:</label>
+            <input type="number" id="transformY" value="0" step="1">
+          </div>
+          <div class="transform-row">
+            <button class="btn-info" onclick="applyTransform()">应用变换</button>
+            <button class="btn-info" onclick="resetTransformUI()">重置参数</button>
+          </div>
+          <p class="info-text">缩放: 调整块内图像大小。平移: 移动块内图像位置。</p>
+          <p class="info-text">选择"移动"工具后可在预览区域拖拽平移内容。</p>
+        </div>
+
+        <div>
+          <p class="info-text">左键绘制/擦除，点击网格中的块进行选择。</p>
+          <p class="info-text">橡皮擦: 擦除为透明（抠图）。画笔: 用选定颜色绘制。</p>
+          <p class="info-text" id="blockInfo"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ========== Gemini 水印去除算法 (基于 gemini-watermark-remover) ==========
+const BG_48_SRC = 'data:image/png;base64,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';
+const BG_96_SRC = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAIAAABt+uBvAAAfrElEQVR4nJV9zXNc15Xf75zXIuBUjG45M7GyEahFTMhVMUEvhmQqGYJeRPTG1mokbUL5v5rsaM/CkjdDr4b2RqCnKga9iIHJwqCyMCgvbG/ibparBGjwzpnF+bjnvm7Q9isU2Hj93r3nno/f+bgfJOaZqg4EJfglSkSXMtLAKkRETKqqRMM4jmC1Z5hZVZEXEylUiYgAISKBf8sgiKoqDayqIkJEKBeRArh9++7BwcHn558/+8XRz//30cDDOI7WCxGBCYCIZL9EpKoKEKCqzFzpr09aCzZAb628DjAAggBin5UEBCPfuxcRiIpIG2+On8TuZ9Ot9eg+Pxt9+TkIIDBZL9lU/yLv7Czeeeedra2txWLxzv948KXtL9WxGWuS1HzRvlKAFDpKtm8yGMfRPmc7diVtRcA+8GEYGqMBEDEgIpcABKqkSiIMgYoIKQjCIACqojpmQ+v8IrUuRyVJ9pk2qY7Gpon0AIAAJoG+8Z/eaGQp9vb2UloCFRWI6igQJQWEmGbeCBGI7DMpjFpmBhPPBh/zbAATRCEKZSgn2UzEpGyM1iZCKEhBopzq54IiqGqaWw5VtXAkBl9V3dlUpG2iMD7Yncpcex7eIO/tfb3IDbu7u9kaFTv2Xpi1kMUAmJi5ERDWnZprJm/jomCohjJOlAsFATjJVcIwzBjZTBnKyIi2NRPVYmU2BopDVfHo2prRASJYpUxpaqQoFKHPXr0qN/vJ0mSpqn0RzuU//Wu9MoyPqxmtqmXJYwxxpiAQzBF4x8/fiyN4XDYoZLA5LfEhtg0+glMIGZY6wABMMbs4CaiR8brkYIDwCj00uuEMUTQ1MYq/BQRYZhZuq82nxEsaYhVpZPaZomSSLvX62VZprUyM0DiQACIGLCAESIAEINAAAEOcQdD4a+2FJqmhDd/YEVkMpmEtrU2igCocNHW13swRBQYcl0enxbHpzEhKo0xSZJEgLIsC4Q5HJaJ2Qg7kKBjwMJyCDciBBcw7fjSO4tQapdi5vF43IZ+cnISdh9Y0At2RoZWFNtLsxr8N6CUTgCaHq3g+Pg4TVO1FACSaDLmgMhYC8sEQzCu3/mQjNEMSTvoDs4b+nXny5cvo4lBJpNJmKj9z81VrtNhikCgTsRRfAklmurxeKx9JZIsy548eeITKJgAQwzXJlhDTAwDgrXkxxCD2GfqgEPa4rnBOlApFUC/39fR1CmTyWQwGAQrR8TonMRNjjYpTmPSmUnC8ODgQHqSJDk7O9uNBkCv15tOp4eHh8SQgBICiCGu49YnSUJOiLGJcG2ydmdwnRcvXuwwlpYkSabTaZS1vyimc7R2Se16z58/f/jw4Z5LA8iy7NmzZ8J76CQ25F2UGsEAJjxo5194q0fn9unp6fHx8f5oRCQ1nJ+fbxtA3HAjAmCMCaGuAQWgh4eH0+k0y7LGvPiU3CVXV1fz+by+WQkCJYaImKzL6SEN6uMpjBVMg8FgOp3GfnNPQADqup79MLv59AlWn75E/vAlf20ibmWg0Pn06dPJZNLr9e6nfLu8//Ahv/gFAEdcWEsgZnYpR3uM9KRpOplMGmb6SlLX9Ww2q29WyjH8+SI+pD0GQJIkJycn/8J/I4mWjaQoijzPb25uJJsjmAwqprIsG4/HbVZ2L/1fpCiKoijKqgTRBlCWZcPhcDQafUVfuZfUdb1cLpfL5cePf9Lr16/3zLz/g9T1quNy+F2FiYjSNB0Oh8Ph8HtRtV6vi6JYLpdVVbmb8t3dnSAbjUbRNfmbSlmWeZ6XHytEUQafEo0xR0dHUdjvG2X3Sd/Fb0We56t6BX8l2mTq6BCVnqOjo7Ozs29hRGGlqqrOr40CIKqeiGg8Hn/xcri/rG/XeZ7/evnrjjGbC3V05YC/BSRJ8urVq36/3zX7Hjaq63o+n19fX/upUqe5VxFok7UBtQ+T6XQ6GAz2Vd6Ssizn8/nt7a3ay1ZAYbMN520XkKenpx0B2E2SLOo+FEWxWPwMgMnC3/adejZMYLLS42r7oH4LGodpsVgURdHQuIcURbFYLDYlVKg9sCk5wpWNiHym9pUAEQGG6EAqSxhilRQWi0VZVmrz23yI5cPV1dX5TwsmWGYrb2TW36OJGjdXhryKxEeHvjR2Fgzz+bu6XnVgaHEmXhytEK0W1aUADJPjAL6CtPZv5rsGSvUKtv7r8/zdj+v1uoOUpsxms7qunT6+g1/TvTQCxE6XR2kBqxjyZo6K66gsAXB1fZ3neQdJSvI8X61WpNaMWCFuKNrkGuGGmMm95fhpvPkn/f6lAgAuLy/LstyGpq7r9+8d4rAr443qaln/ehHt1siv3dvt2B/RDpJms5lGE62gEy9az0XGcQCK3DL4DTPr0pPZEjPAZVlusoCSoihWqzpCHy7ODRXhbUTJly9oDr4fKDaV9NZJUrszPOjsI0a/FzfwNt4eHH+BSyICqK7rqqo0u0VRrFYridyN87L3pBYf7qvq3wqc3DMldJmiK06pgi8uLqQjAAorRG+p+zLUxks+z7rOkOzlIUy8yrAcQFVV3a4/ywBPmJsVMcTM3l/h9xDlLga4I1PDGaD7UNBPuCKBleUfy2gd+DOrPWubGHJJyD+L+LCTjEXEgH//2uSxhu1/Xzocy+VSL+2cUhrqLVZ/jTYL0IMtQEklT3/iWCutzUljDDNXVSVHRFWW7SOtccHag6V/AF1/slVRyOkZAAAAAElFTkSuQmCC';
+
+// 加载背景捕获图
+async function loadBgImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// 计算 alpha map
+function calculateAlphaMap(bgImageData) {
+  const { width, height, data } = bgImageData;
+  const alphaMap = new Float32Array(width * height);
+  for (let i = 0; i < alphaMap.length; i++) {
+    const idx = i * 4;
+    alphaMap[i] = Math.max(data[idx], data[idx + 1], data[idx + 2]) / 255.0;
+  }
+  return alphaMap;
+}
+
+// 反向 alpha 混合去水印
+function removeWatermark(imageData, alphaMap, position, options = {}) {
+  const { x, y, width, height } = position;
+  const alphaGain = options.alphaGain || 1;
+  const ALPHA_NOISE_FLOOR = 3 / 255;
+  const ALPHA_THRESHOLD = 0.002;
+  const MAX_ALPHA = 0.99;
+  const LOGO_VALUE = 255;
+
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const imgIdx = ((y + row) * imageData.width + (x + col)) * 4;
+      const alphaIdx = row * width + col;
+      const rawAlpha = alphaMap[alphaIdx];
+      const signalAlpha = Math.max(0, rawAlpha - ALPHA_NOISE_FLOOR) * alphaGain;
+      if (signalAlpha < ALPHA_THRESHOLD) continue;
+      const alpha = Math.min(rawAlpha * alphaGain, MAX_ALPHA);
+      const oneMinusAlpha = 1.0 - alpha;
+      for (let c = 0; c < 3; c++) {
+        const watermarked = imageData.data[imgIdx + c];
+        const original = (watermarked - alpha * LOGO_VALUE) / oneMinusAlpha;
+        imageData.data[imgIdx + c] = Math.max(0, Math.min(255, Math.round(original)));
+      }
+    }
+  }
+}
+
+// 检测水印配置
+function detectWatermarkConfig(w, h) {
+  if (w > 1024 && h > 1024) return { logoSize: 96, marginRight: 64, marginBottom: 64 };
+  return { logoSize: 48, marginRight: 32, marginBottom: 32 };
+}
+
+function calculateWatermarkPosition(w, h, config) {
+  return {
+    x: w - config.marginRight - config.logoSize,
+    y: h - config.marginBottom - config.logoSize,
+    width: config.logoSize,
+    height: config.logoSize
+  };
+}
+
+// 插值 alpha map
+function interpolateAlphaMap(src, srcSize, tgtSize) {
+  if (srcSize === tgtSize) return new Float32Array(src);
+  const out = new Float32Array(tgtSize * tgtSize);
+  const scale = (srcSize - 1) / Math.max(1, tgtSize - 1);
+  for (let y = 0; y < tgtSize; y++) {
+    const sy = y * scale;
+    const y0 = Math.floor(sy), y1 = Math.min(srcSize - 1, y0 + 1), fy = sy - y0;
+    for (let x = 0; x < tgtSize; x++) {
+      const sx = x * scale;
+      const x0 = Math.floor(sx), x1 = Math.min(srcSize - 1, x0 + 1), fx = sx - x0;
+      const p00 = src[y0 * srcSize + x0], p10 = src[y0 * srcSize + x1];
+      const p01 = src[y1 * srcSize + x0], p11 = src[y1 * srcSize + x1];
+      out[y * tgtSize + x] = (p00 + (p10 - p00) * fx) + ((p01 + (p11 - p01) * fx) - (p00 + (p10 - p00) * fx)) * fy;
+    }
+  }
+  return out;
+}
+
+// 加载 alpha map 缓存
+let alphaMapCache = {};
+async function getAlphaMapForSize(size) {
+  if (alphaMapCache[size]) return alphaMapCache[size];
+  const bgImg = size === 96
+    ? await loadBgImage(BG_96_SRC)
+    : await loadBgImage(BG_48_SRC);
+  const tmpCanvas = document.createElement('canvas');
+  tmpCanvas.width = size; tmpCanvas.height = size;
+  const tmpCtx = tmpCanvas.getContext('2d');
+  tmpCtx.drawImage(bgImg, 0, 0, size, size);
+  const bgData = tmpCtx.getImageData(0, 0, size, size);
+  const alphaMap = calculateAlphaMap(bgData);
+  alphaMapCache[size] = alphaMap;
+  return alphaMap;
+}
+
+// 计算区域与 alpha map 的空间相关性（用于检测水印是否存在 & 评估去除效果）
+function computeSpatialCorrelation(imageData, alphaMap, position) {
+  const { x, y, width, height } = position;
+  const n = width * height;
+  if (n === 0) return 0;
+
+  // 提取灰度 patch
+  const patch = new Float32Array(n);
+  for (let row = 0; row < height; row++) {
+    for (let col = 0; col < width; col++) {
+      const idx = ((y + row) * imageData.width + (x + col)) * 4;
+      patch[row * width + col] = (0.2126 * imageData.data[idx] + 0.7152 * imageData.data[idx+1] + 0.0722 * imageData.data[idx+2]) / 255;
+    }
+  }
+
+  // normalized cross correlation
+  let sumA = 0, sumB = 0;
+  for (let i = 0; i < n; i++) { sumA += patch[i]; sumB += alphaMap[i]; }
+  const meanA = sumA / n, meanB = sumB / n;
+  let num = 0, denA = 0, denB = 0;
+  for (let i = 0; i < n; i++) {
+    const da = patch[i] - meanA, db = alphaMap[i] - meanB;
+    num += da * db; denA += da * da; denB += db * db;
+  }
+  const den = Math.sqrt(denA * denB);
+  return den < 1e-8 ? 0 : num / den;
+}
+
+// 克隆 ImageData
+function cloneImageData(imgData) {
+  return new ImageData(new Uint8ClampedArray(imgData.data), imgData.width, imgData.height);
+}
+
+// 完整去水印流程 — 尝试两种尺寸、自适应 alpha gain
+async function processWatermarkRemoval(canvas, manualGain = 0) {
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  // 两种配置都尝试
+  const configs = [
+    detectWatermarkConfig(canvas.width, canvas.height),
+  ];
+  // 也尝试另一种尺寸
+  const altConfig = configs[0].logoSize === 96
+    ? { logoSize: 48, marginRight: 32, marginBottom: 32 }
+    : { logoSize: 96, marginRight: 64, marginBottom: 64 };
+  configs.push(altConfig);
+
+  let bestResult = null;
+  let bestScore = -Infinity;
+
+  for (const config of configs) {
+    const position = calculateWatermarkPosition(canvas.width, canvas.height, config);
+    if (position.x < 0 || position.y < 0 ||
+        position.x + position.width > canvas.width ||
+        position.y + position.height > canvas.height) continue;
+
+    const alphaMap = await getAlphaMapForSize(config.logoSize);
+
+    // 计算原始相关性分数
+    const originalScore = computeSpatialCorrelation(imgData, alphaMap, position);
+    if (originalScore < 0.15) continue; // 没检测到水印信号，跳过此尺寸
+
+    // 确定要尝试的 alpha gain 列表
+    const gains = manualGain > 0
+      ? [manualGain]
+      : [1, 1.05, 1.12, 1.2, 1.3, 1.45, 1.6, 1.85, 2.0, 2.4];
+
+    for (const gain of gains) {
+      const testData = cloneImageData(imgData);
+      removeWatermark(testData, alphaMap, position, { alphaGain: gain });
+      const residualScore = computeSpatialCorrelation(testData, alphaMap, position);
+      const suppression = originalScore - residualScore;
+
+      if (suppression > bestScore) {
+        bestScore = suppression;
+        bestResult = { imgData: testData, config, position, gain, originalScore, residualScore };
+      }
+    }
+  }
+
+  if (bestResult) {
+    ctx.putImageData(bestResult.imgData, 0, 0);
+    console.log(`水印去除: size=${bestResult.config.logoSize}, gain=${bestResult.gain}, ` +
+      `原始=${bestResult.originalScore.toFixed(3)}, 残留=${bestResult.residualScore.toFixed(3)}`);
+    return bestResult;
+  }
+  return null;
+}
+
+
+// ========== 应用状态 ==========
+let state = {
+  originalImage: null,       // 原始上传的 Image 对象
+  processedCanvas: null,     // 去水印后的 canvas
+  targetW: 1024,
+  targetH: 896,
+  blockSize: 128,
+  cols: 8,
+  rows: 7,
+  blocks: [],                // 每个块的 canvas
+  blockHistory: [],          // 每个块的历史记录
+  selectedBlock: -1,
+  removeWatermark: true,
+  currentTool: 'eraser',
+  bgColor: null,             // 检测到的背景色
+  // 变换相关 - 每个块独立的变换参数
+  blockTransforms: [],       // [{scale, offsetX, offsetY}, ...]
+};
+
+// ========== UI ==========
+const fileInput = document.getElementById('fileInput');
+const gridContainer = document.getElementById('gridContainer');
+const uploadArea = document.getElementById('uploadArea');
+const previewCanvas = document.getElementById('previewCanvas');
+const previewCtx = previewCanvas.getContext('2d');
+const infoText = document.getElementById('infoText');
+const coordText = document.getElementById('coordText');
+const blockInfo = document.getElementById('blockInfo');
+const brushSizeInput = document.getElementById('brushSize');
+const brushSizeVal = document.getElementById('brushSizeVal');
+
+brushSizeInput.oninput = () => { brushSizeVal.textContent = brushSizeInput.value; };
+
+const transformScaleInput = document.getElementById('transformScale');
+const transformScaleVal = document.getElementById('transformScaleVal');
+const transformXInput = document.getElementById('transformX');
+const transformYInput = document.getElementById('transformY');
+
+transformScaleInput.oninput = () => {
+  transformScaleVal.textContent = transformScaleInput.value + '%';
+  // 实时预览缩放效果
+  const idx = state.selectedBlock;
+  if (idx < 0) return;
+  const scale = parseInt(transformScaleInput.value) || 100;
+  const offsetX = parseInt(transformXInput.value) || 0;
+  const offsetY = parseInt(transformYInput.value) || 0;
+  state.blockTransforms[idx] = { scale, offsetX, offsetY };
+  scaleBlockContent(idx, scale);
+};
+
+// 拖拽上传
+const gridPanel = document.getElementById('gridPanel');
+gridPanel.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+gridPanel.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImageFile(file);
+});
+
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadImageFile(e.target.files[0]);
+});
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function toggleWatermarkRemoval() {
+  state.removeWatermark = !state.removeWatermark;
+  const btn = document.getElementById('btnWatermark');
+  btn.textContent = '去水印: ' + (state.removeWatermark ? '开' : '关');
+  btn.classList.toggle('active', state.removeWatermark);
+}
+
+// 去水印强度滑条
+const wmGainInput = document.getElementById('wmGain');
+const wmGainVal = document.getElementById('wmGainVal');
+wmGainInput.oninput = () => {
+  const v = parseInt(wmGainInput.value);
+  wmGainVal.textContent = v === 0 ? '自动' : (v / 10).toFixed(1);
+};
+
+// 重新去水印（从原图重新处理）
+async function reapplyWatermark() {
+  if (!state.originalImage) { showToast('请先上传图片'); return; }
+  showToast('正在重新去水印...');
+
+  const canvas = document.createElement('canvas');
+  canvas.width = state.originalImage.width;
+  canvas.height = state.originalImage.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(state.originalImage, 0, 0);
+
+  if (state.removeWatermark) {
+    const gainVal = parseInt(wmGainInput.value);
+    const manualGain = gainVal > 0 ? gainVal / 10 : 0;
+    const result = await processWatermarkRemoval(canvas, manualGain);
+    if (result) {
+      showToast(`去水印完成 (size=${result.config.logoSize}, gain=${result.gain.toFixed(2)})`);
+    } else {
+      showToast('未检测到水印');
+    }
+  }
+
+  state.processedCanvas = canvas;
+  detectBgColor(canvas);
+  applyResize();
+}
+
+// ========== 加载图片 ==========
+async function loadImageFile(file) {
+  const img = new Image();
+  img.onload = async () => {
+    state.originalImage = img;
+    infoText.textContent = `原图: ${img.width}×${img.height}`;
+
+    // 创建处理后的 canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+
+    // 去水印
+    if (state.removeWatermark) {
+      showToast('正在去除水印...');
+      await processWatermarkRemoval(canvas);
+      showToast('水印去除完成');
+    }
+
+    state.processedCanvas = canvas;
+
+    // 检测背景色 (取四角像素的众数)
+    detectBgColor(canvas);
+
+    // 自动应用切分
+    applyResize();
+  };
+  img.src = URL.createObjectURL(file);
+}
+
+function detectBgColor(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const corners = [
+    ctx.getImageData(0, 0, 1, 1).data,
+    ctx.getImageData(w - 1, 0, 1, 1).data,
+    ctx.getImageData(0, h - 1, 1, 1).data,
+    ctx.getImageData(w - 1, h - 1, 1, 1).data,
+  ];
+  // 简单取左上角作为背景色
+  state.bgColor = { r: corners[0][0], g: corners[0][1], b: corners[0][2], a: corners[0][3] };
+}
+
+// ========== 切分 ==========
+function applyResize() {
+  if (!state.processedCanvas) { showToast('请先上传图片'); return; }
+
+  state.targetW = parseInt(document.getElementById('targetW').value) || 1024;
+  state.targetH = parseInt(document.getElementById('targetH').value) || 896;
+  state.blockSize = parseInt(document.getElementById('blockSize').value) || 128;
+  state.cols = Math.ceil(state.targetW / state.blockSize);
+  state.rows = Math.ceil(state.targetH / state.blockSize);
+
+  // 缩放原图到目标尺寸
+  const resizedCanvas = document.createElement('canvas');
+  resizedCanvas.width = state.targetW;
+  resizedCanvas.height = state.targetH;
+  const rCtx = resizedCanvas.getContext('2d');
+
+  // 用背景色填充
+  if (state.bgColor) {
+    rCtx.fillStyle = `rgba(${state.bgColor.r},${state.bgColor.g},${state.bgColor.b},${state.bgColor.a / 255})`;
+    rCtx.fillRect(0, 0, state.targetW, state.targetH);
+  }
+
+  // 居中绘制
+  const src = state.processedCanvas;
+  const scale = Math.min(state.targetW / src.width, state.targetH / src.height);
+  const sw = src.width * scale, sh = src.height * scale;
+  const sx = (state.targetW - sw) / 2, sy = (state.targetH - sh) / 2;
+  rCtx.drawImage(src, sx, sy, sw, sh);
+
+  // 切分为块
+  state.blocks = [];
+  state.blockHistory = [];
+  state.blockTransforms = [];
+  gridContainer.innerHTML = '';
+  gridContainer.style.display = 'inline-grid';
+  gridContainer.style.gridTemplateColumns = `repeat(${state.cols}, ${state.blockSize}px)`;
+  uploadArea.style.display = 'none';
+
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const bCanvas = document.createElement('canvas');
+      bCanvas.width = state.blockSize;
+      bCanvas.height = state.blockSize;
+      const bCtx = bCanvas.getContext('2d');
+
+      // 从缩放后的图绘制块
+      bCtx.drawImage(resizedCanvas, c * state.blockSize, r * state.blockSize,
+        state.blockSize, state.blockSize, 0, 0, state.blockSize, state.blockSize);
+
+      state.blocks.push(bCanvas);
+      state.blockHistory.push([cloneCanvas(bCanvas)]); // 初始状态
+      state.blockTransforms.push({ scale: 100, offsetX: 0, offsetY: 0 });
+
+      // 创建 grid cell
+      const cell = document.createElement('div');
+      cell.className = 'grid-cell';
+      cell.style.width = state.blockSize + 'px';
+      cell.style.height = state.blockSize + 'px';
+      const displayCanvas = document.createElement('canvas');
+      displayCanvas.width = state.blockSize;
+      displayCanvas.height = state.blockSize;
+      displayCanvas.getContext('2d').drawImage(bCanvas, 0, 0);
+      cell.appendChild(displayCanvas);
+      cell.dataset.index = r * state.cols + c;
+      cell.addEventListener('click', () => selectBlock(parseInt(cell.dataset.index)));
+      gridContainer.appendChild(cell);
+    }
+  }
+
+  infoText.textContent = `${state.targetW}×${state.targetH} → ${state.cols}×${state.rows} 块 (${state.blockSize}px)`;
+  state.selectedBlock = -1;
+  updatePreview();
+
+  // 显示缩放条，自动适应
+  document.getElementById('zoomBar').style.display = 'flex';
+  // 延迟一帧等布局完成后计算适应比例
+  requestAnimationFrame(() => {
+    zoomToFit();
+  });
+
+  showToast('切分完成');
+}
+
+function cloneCanvas(src) {
+  const c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  c.getContext('2d').drawImage(src, 0, 0);
+  return c;
+}
+
+// ========== 块选择与预览 ==========
+function selectBlock(idx) {
+  state.selectedBlock = idx;
+  // 更新选中样式
+  document.querySelectorAll('.grid-cell').forEach((cell, i) => {
+    cell.classList.toggle('selected', i === idx);
+  });
+  const r = Math.floor(idx / state.cols), c = idx % state.cols;
+  coordText.textContent = `块 [${c}, ${r}]`;
+  blockInfo.textContent = `位置: (${c * state.blockSize}, ${r * state.blockSize}) 尺寸: ${state.blockSize}×${state.blockSize}`;
+  // 加载该块的变换参数到 UI
+  loadTransformUI(idx);
+  updatePreview();
+}
+
+function updatePreview() {
+  if (state.selectedBlock < 0 || state.selectedBlock >= state.blocks.length) {
+    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    return;
+  }
+  const src = state.blocks[state.selectedBlock];
+  previewCanvas.width = src.width;
+  previewCanvas.height = src.height;
+  previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+  previewCtx.drawImage(src, 0, 0);
+}
+
+function updateGridCell(idx) {
+  const cells = gridContainer.children;
+  if (idx < cells.length) {
+    const displayCanvas = cells[idx].querySelector('canvas');
+    displayCanvas.getContext('2d').clearRect(0, 0, displayCanvas.width, displayCanvas.height);
+    displayCanvas.getContext('2d').drawImage(state.blocks[idx], 0, 0);
+  }
+}
+
+// ========== 编辑工具 ==========
+function setTool(tool) {
+  state.currentTool = tool;
+  document.getElementById('btnEraser').classList.toggle('active', tool === 'eraser');
+  document.getElementById('btnBrush').classList.toggle('active', tool === 'brush');
+  document.getElementById('btnMove').classList.toggle('active', tool === 'move');
+  previewCanvas.style.cursor = tool === 'move' ? 'grab' : 'crosshair';
+}
+
+// 预览 canvas 上的绘制 / 移动
+let isDrawing = false;
+let lastX = -1, lastY = -1;
+
+previewCanvas.addEventListener('mousedown', e => {
+  if (state.selectedBlock < 0) return;
+  isDrawing = true;
+  const pos = getCanvasPos(e);
+
+  if (state.currentTool === 'move') {
+    // 移动模式：记录起点，不绘制
+    lastX = pos.x; lastY = pos.y;
+    pushHistory(state.selectedBlock);
+  } else {
+    // 绘制模式
+    pushHistory(state.selectedBlock);
+    draw(pos.x, pos.y);
+    lastX = pos.x; lastY = pos.y;
+  }
+});
+
+previewCanvas.addEventListener('mousemove', e => {
+  if (!isDrawing) return;
+  const pos = getCanvasPos(e);
+
+  if (state.currentTool === 'move') {
+    // 移动模式：平移块内容
+    const dx = pos.x - lastX;
+    const dy = pos.y - lastY;
+    if (dx !== 0 || dy !== 0) {
+      moveBlockContent(state.selectedBlock, dx, dy);
+      // 更新变换参数
+      const t = state.blockTransforms[state.selectedBlock];
+      t.offsetX += dx;
+      t.offsetY += dy;
+      loadTransformUI(state.selectedBlock);
+      lastX = pos.x; lastY = pos.y;
+    }
+  } else {
+    drawLine(lastX, lastY, pos.x, pos.y);
+    lastX = pos.x; lastY = pos.y;
+  }
+});
+
+previewCanvas.addEventListener('mouseup', () => { isDrawing = false; lastX = lastY = -1; });
+previewCanvas.addEventListener('mouseleave', () => { isDrawing = false; lastX = lastY = -1; });
+
+function getCanvasPos(e) {
+  const rect = previewCanvas.getBoundingClientRect();
+  const scaleX = previewCanvas.width / rect.width;
+  const scaleY = previewCanvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY,
+  };
+}
+
+function draw(x, y) {
+  const idx = state.selectedBlock;
+  const ctx = state.blocks[idx].getContext('2d');
+  const size = parseInt(brushSizeInput.value);
+
+  if (state.currentTool === 'eraser') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath();
+    ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else if (state.currentTool === 'brush') {
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = document.getElementById('brushColor').value;
+    ctx.beginPath();
+    ctx.arc(x, y, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  updatePreview();
+  updateGridCell(idx);
+}
+
+function drawLine(x0, y0, x1, y1) {
+  const dist = Math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2);
+  const steps = Math.max(1, Math.ceil(dist / 2));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    draw(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+  }
+}
+
+// ========== 撤销/重置 ==========
+function pushHistory(idx) {
+  if (!state.blockHistory[idx]) state.blockHistory[idx] = [];
+  // 最多保留 20 步
+  if (state.blockHistory[idx].length > 20) state.blockHistory[idx].shift();
+  state.blockHistory[idx].push(cloneCanvas(state.blocks[idx]));
+}
+
+function undoEdit() {
+  const idx = state.selectedBlock;
+  if (idx < 0) return;
+  const hist = state.blockHistory[idx];
+  if (!hist || hist.length <= 1) { showToast('没有更多撤销记录'); return; }
+  hist.pop(); // 移除当前状态
+  const prev = hist[hist.length - 1];
+  const ctx = state.blocks[idx].getContext('2d');
+  ctx.clearRect(0, 0, state.blockSize, state.blockSize);
+  ctx.drawImage(prev, 0, 0);
+  updatePreview();
+  updateGridCell(idx);
+}
+
+function resetBlock() {
+  const idx = state.selectedBlock;
+  if (idx < 0) return;
+  const hist = state.blockHistory[idx];
+  if (!hist || hist.length === 0) return;
+  const first = hist[0];
+  const ctx = state.blocks[idx].getContext('2d');
+  ctx.clearRect(0, 0, state.blockSize, state.blockSize);
+  ctx.drawImage(first, 0, 0);
+  state.blockHistory[idx] = [cloneCanvas(first)];
+  updatePreview();
+  updateGridCell(idx);
+  showToast('块已重置');
+}
+
+function clearBlock() {
+  const idx = state.selectedBlock;
+  if (idx < 0) return;
+  pushHistory(idx);
+  const ctx = state.blocks[idx].getContext('2d');
+  ctx.clearRect(0, 0, state.blockSize, state.blockSize);
+  updatePreview();
+  updateGridCell(idx);
+  showToast('块已清空');
+}
+
+// ========== 块内容变换 ==========
+
+// 平移块内容（就地修改块 canvas）
+function moveBlockContent(idx, dx, dy) {
+  const blockCanvas = state.blocks[idx];
+  const size = state.blockSize;
+  // 拷贝当前内容
+  const tmp = cloneCanvas(blockCanvas);
+  const ctx = blockCanvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  // 填充背景色
+  if (state.bgColor) {
+    ctx.fillStyle = `rgba(${state.bgColor.r},${state.bgColor.g},${state.bgColor.b},${state.bgColor.a / 255})`;
+    ctx.fillRect(0, 0, size, size);
+  }
+  // 偏移绘制
+  ctx.drawImage(tmp, dx, dy);
+  updatePreview();
+  updateGridCell(idx);
+}
+
+// 缩放块内容（基于块中心缩放，保留背景色）
+function scaleBlockContent(idx, scalePercent) {
+  const blockCanvas = state.blocks[idx];
+  const size = state.blockSize;
+  const hist = state.blockHistory[idx];
+  // 始终从初始状态重新计算，避免多次缩放导致质量劣化
+  const original = hist[0];
+  const ctx = blockCanvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  // 填充背景色
+  if (state.bgColor) {
+    ctx.fillStyle = `rgba(${state.bgColor.r},${state.bgColor.g},${state.bgColor.b},${state.bgColor.a / 255})`;
+    ctx.fillRect(0, 0, size, size);
+  }
+  const s = scalePercent / 100;
+  const t = state.blockTransforms[idx];
+  const newW = size * s, newH = size * s;
+  const drawX = (size - newW) / 2 + t.offsetX;
+  const drawY = (size - newH) / 2 + t.offsetY;
+  ctx.drawImage(original, drawX, drawY, newW, newH);
+  updatePreview();
+  updateGridCell(idx);
+}
+
+// 应用变换（从 UI 读取参数，应用到选中块）
+function applyTransform() {
+  const idx = state.selectedBlock;
+  if (idx < 0) { showToast('请先选择一个块'); return; }
+  pushHistory(idx);
+
+  const scale = parseInt(transformScaleInput.value) || 100;
+  const offsetX = parseInt(transformXInput.value) || 0;
+  const offsetY = parseInt(transformYInput.value) || 0;
+
+  state.blockTransforms[idx] = { scale, offsetX, offsetY };
+  scaleBlockContent(idx, scale);
+  showToast(`变换已应用: ${scale}% (${offsetX}, ${offsetY})`);
+}
+
+// 加载块的变换参数到 UI
+function loadTransformUI(idx) {
+  if (idx < 0 || !state.blockTransforms[idx]) return;
+  const t = state.blockTransforms[idx];
+  transformScaleInput.value = t.scale;
+  transformScaleVal.textContent = t.scale + '%';
+  transformXInput.value = t.offsetX;
+  transformYInput.value = t.offsetY;
+}
+
+// 重置变换参数
+function resetTransformUI() {
+  const idx = state.selectedBlock;
+  if (idx < 0) return;
+  state.blockTransforms[idx] = { scale: 100, offsetX: 0, offsetY: 0 };
+  loadTransformUI(idx);
+  // 恢复初始内容
+  const hist = state.blockHistory[idx];
+  if (hist && hist.length > 0) {
+    pushHistory(idx);
+    const first = hist[0];
+    const ctx = state.blocks[idx].getContext('2d');
+    ctx.clearRect(0, 0, state.blockSize, state.blockSize);
+    ctx.drawImage(first, 0, 0);
+    updatePreview();
+    updateGridCell(idx);
+  }
+  showToast('变换参数已重置');
+}
+
+// ========== 导出 ==========
+function exportImage() {
+  if (state.blocks.length === 0) { showToast('请先切分图片'); return; }
+
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = state.targetW;
+  exportCanvas.height = state.targetH;
+  const ctx = exportCanvas.getContext('2d');
+
+  // 填充背景色
+  if (state.bgColor) {
+    ctx.fillStyle = `rgba(${state.bgColor.r},${state.bgColor.g},${state.bgColor.b},${state.bgColor.a / 255})`;
+    ctx.fillRect(0, 0, state.targetW, state.targetH);
+  }
+
+  // 绘制所有块
+  for (let r = 0; r < state.rows; r++) {
+    for (let c = 0; c < state.cols; c++) {
+      const idx = r * state.cols + c;
+      ctx.drawImage(state.blocks[idx], c * state.blockSize, r * state.blockSize);
+    }
+  }
+
+  // 下载
+  const link = document.createElement('a');
+  link.download = `adjusted_${state.targetW}x${state.targetH}.png`;
+  link.href = exportCanvas.toDataURL('image/png');
+  link.click();
+  showToast('图片已导出');
+}
+
+// ========== 网格缩放 ==========
+let gridZoomLevel = 100;
+
+function setGridZoom(percent) {
+  gridZoomLevel = Math.max(5, Math.min(100, percent));
+  gridContainer.style.transform = `scale(${gridZoomLevel / 100})`;
+  document.getElementById('gridZoom').value = gridZoomLevel;
+  document.getElementById('gridZoomVal').textContent = gridZoomLevel + '%';
+}
+
+function zoomGrid(delta) {
+  setGridZoom(gridZoomLevel + delta);
+}
+
+function zoomToFit() {
+  const panel = document.getElementById('gridPanel');
+  const panelW = panel.clientWidth - 40; // padding
+  const panelH = panel.clientHeight - 80; // zoom bar + padding
+  const gridW = state.cols * state.blockSize + state.cols; // gap
+  const gridH = state.rows * state.blockSize + state.rows;
+  const fit = Math.min(panelW / gridW, panelH / gridH, 1) * 100;
+  setGridZoom(Math.floor(fit));
+}
+
+// 鼠标滚轮缩放网格
+document.getElementById('gridPanel').addEventListener('wheel', e => {
+  if (!state.blocks.length) return;
+  // 只在按住 Ctrl/Cmd 时缩放，否则正常滚动
+  if (!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  zoomGrid(e.deltaY > 0 ? -5 : 5);
+}, { passive: false });
+
+// 初始化工具状态
+setTool('eraser');
+</script>
+</body>
+</html>
