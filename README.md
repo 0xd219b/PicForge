@@ -4,8 +4,6 @@
 
 专为 [Confirmo](https://confirmo.love/) 自定义形象素材打造。感谢 [yetone](https://github.com/yetone/confirmo-releases) 提供如此优秀的插件！
 
-<img width="1920" height="993" alt="PicForge 主界面" src="https://github.com/user-attachments/assets/9e793440-8d0a-4075-9f2e-b4140c9e9f38" />
-
 ## 特性一览
 
 | 功能 | 说明 |
